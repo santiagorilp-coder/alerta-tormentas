@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>🌦️ Alerta de Tormentas</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Poppins", sans-serif;
+      background: linear-gradient(135deg, #89f7fe, #66a6ff);
+      height: 100vh; display: flex; align-items: center; justify-content: center;
+      transition: background 1.2s ease-in-out; overflow: hidden;
+    }
+    .bg-animation {
+      position: absolute; inset: 0;
+      background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.25), transparent 70%),
+                  radial-gradient(circle at 70% 70%, rgba(255,255,255,0.15), transparent 70%);
+      animation: moveBg 14s infinite alternate ease-in-out; z-index: 0;
+    }
+    @keyframes moveBg { from {transform: translate(0,0);} to {transform: translate(-60px,50px);} }
+
+    .card {
+      position: relative; z-index: 2;
+      background: rgba(255,255,255,0.12);
+      border-radius: 25px;
+      backdrop-filter: blur(25px) saturate(180%);
+      box-shadow: 0 15px 35px rgba(0,0,0,0.3);
+      padding: 45px 35px; width: 380px; text-align: center;
+      animation: fadeIn 1s ease-out; color: #fff; transition: transform 0.4s ease;
+    }
+    .card:hover { transform: translateY(-6px); }
+    @keyframes fadeIn { from {opacity:0; transform:translateY(30px);} to {opacity:1; transform:translateY(0);} }
+
+    h1 { font-size: 2em; font-weight: 600; margin-bottom: 15px; text-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+    #icon { font-size: 80px; margin: 30px 0; transition: transform 0.6s ease, color 0.6s ease; }
+    #resultado { font-size: 1.1em; min-height: 40px; font-weight: 400; text-shadow: 0 1px 6px rgba(0,0,0,0.3); }
+    #detalle { margin-top: 15px; font-size: 0.95em; color: #e3f2fd; min-height: 40px; line-height: 1.6; }
+
+    table {
+      width: 100%; margin-top: 15px; border-collapse: collapse; font-size: 0.9em;
+    }
+    th, td {
+      padding: 6px 4px; border-bottom: 1px solid rgba(255,255,255,0.15);
+    }
+    th { color: #b3e5fc; font-weight: 600; }
+    td { color: #fff; }
+
+    .low { color: #81c784; }
+    .medium { color: #ffeb3b; }
+    .high { color: #ef5350; }
+
+    .wind {
+      margin-top: 10px;
+      font-size: 0.95em;
+      color: #bbdefb;
+      font-weight: 500;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+
+    button {
+      margin-top: 35px; padding: 14px 32px; border: none; border-radius: 12px;
+      background: linear-gradient(135deg, #2196f3, #21cbf3);
+      color: white; font-size: 16px; font-weight: 600; cursor: pointer;
+      box-shadow: 0 8px 25px rgba(33,203,243,0.4);
+      transition: all 0.3s ease;
+    }
+    button:hover { transform: scale(1.07); box-shadow: 0 12px 30px rgba(33,203,243,0.6); }
+
+    .storm { color: #ff5252; animation: flash 1s infinite alternate; }
+    @keyframes flash { from {opacity:1;transform:scale(1.1);} to {opacity:0.7;transform:scale(0.95);} }
+    .loading { color: #eee; animation: spin 1.2s infinite linear; }
+    @keyframes spin { from {transform:rotate(0deg);} to {transform:rotate(360deg);} }
+    .clear { color: #ffeb3b; } .rain { color: #00bcd4; } .cloud { color: #e0e0e0; } .fog { color: #b0bec5; }
+
+    @media (max-width: 400px) {
+      .card { width: 90%; padding: 35px 25px; }
+      h1 {font-size:1.6em;} #icon{font-size:60px;}
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-animation"></div>
+
+  <div class="card">
+    <h1>🌧️ Alerta de Tormentas</h1>
+    <div id="icon">☁️</div>
+    <p id="resultado">Presiona el botón para comprobar el clima en tu zona.</p>
+    <p id="viento" class="wind"></p>
+    <div id="detalle"></div>
+    <button onclick="checkStorm()">Comprobar ahora</button>
+  </div>
+
+  <script>
+    async function checkStorm() {
+      const res = document.getElementById("resultado");
+      const icon = document.getElementById("icon");
+      const det = document.getElementById("detalle");
+      const viento = document.getElementById("viento");
+
+      res.textContent = "Obteniendo ubicación...";
+      det.innerHTML = "";
+      viento.textContent = "";
+      icon.textContent = "⏳";
+      icon.className = "loading";
+
+      if (!navigator.geolocation) {
+        res.textContent = "Tu navegador no soporta geolocalización.";
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(async pos => {
+        const { latitude: lat, longitude: lon } = pos.coords;
+        res.textContent = `Ubicación detectada (${lat.toFixed(2)}, ${lon.toFixed(2)}). Consultando clima...`;
+
+        try {
+          // Solicitamos velocidad del viento (windspeed)
+          const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=weathercode,windspeed_10m&hourly=precipitation,precipitation_probability,windspeed_10m&timezone=auto`;
+          const response = await fetch(url);
+          if (!response.ok) throw new Error("Error en la consulta del clima");
+
+          const data = await response.json();
+          const code = data.current?.weathercode ?? 0;
+          const vientoActual = data.current?.windspeed_10m ?? 0;
+
+          // Clasificación del viento
+          let descViento = "";
+          let colorViento = "";
+          if (vientoActual < 10) { descViento = "🌿 Brisa ligera"; colorViento = "#81c784"; }
+          else if (vientoActual < 25) { descViento = "🍃 Viento moderado"; colorViento = "#ffee58"; }
+          else if (vientoActual < 40) { descViento = "💨 Viento fuerte"; colorViento = "#ff9800"; }
+          else { descViento = "🌪️ Ráfagas peligrosas"; colorViento = "#ef5350"; }
+
+          viento.innerHTML = `${descViento} (${vientoActual.toFixed(1)} km/h)`;
+          viento.style.color = colorViento;
+
+          const clima = {
+            0: ["☀️ Cielo despejado", "clear", "#ffefba, #ffffff"],
+            1: ["🌤️ Mayormente despejado", "clear", "#f6d365, #fda085"],
+            2: ["⛅ Parcialmente nublado", "cloud", "#cfd9df, #e2ebf0"],
+            3: ["☁️ Nublado", "cloud", "#757f9a, #d7dde8"],
+            45: ["🌫️ Niebla", "fog", "#bdc3c7, #2c3e50"],
+            61: ["🌦️ Lluvia ligera", "rain", "#83a4d4, #b6fbff"],
+            63: ["🌧️ Lluvia moderada", "rain", "#4b79a1, #283e51"],
+            65: ["🌧️ Lluvia fuerte", "rain", "#283e51, #485563"],
+            95: ["⛈️ Tormenta ligera o moderada", "storm", "#232526, #414345"],
+            96: ["⛈️ Tormenta con granizo leve", "storm", "#141e30, #243b55"],
+            99: ["🌩️ Tormenta con granizo fuerte", "storm", "#000000, #434343"]
+          };
+
+          const [mensaje, clase, fondo] = clima[code] || ["❓ Clima desconocido", "cloud", "#d7d2cc, #304352"];
+          document.body.style.background = `linear-gradient(135deg, ${fondo})`;
+          icon.className = clase;
+          icon.textContent = mensaje.split(" ")[0];
+          res.textContent = (clase === "storm" ? "⚠️ " : "✅ ") + mensaje;
+
+          const horas = data.hourly?.time || [];
+          const prob = data.hourly?.precipitation_probability || [];
+          const lluvia = data.hourly?.precipitation || [];
+          const vientoHoras = data.hourly?.windspeed_10m || [];
+
+          const ahora = new Date();
+          const idx = horas.findIndex(h => new Date(h) > ahora);
+          const start = idx >= 0 ? idx : 0;
+
+          if (horas.length) {
+            let tabla = `<table><tr><th>Hora local</th><th>Prob. lluvia</th><th>Intensidad</th><th>Viento</th></tr>`;
+            for (let i = start; i < start + 5 && i < horas.length; i++) {
+              const fecha = new Date(horas[i]);
+              const hora = fecha.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+              const p = prob[i] ?? 0;
+              const mm = lluvia[i] ?? 0;
+              const vw = vientoHoras[i] ?? 0;
+              const claseProb = p < 30 ? "low" : p < 70 ? "medium" : "high";
+              tabla += `<tr><td>${hora}</td><td class="${claseProb}">${p}%</td><td>${mm.toFixed(1)} mm/h</td><td>${vw.toFixed(1)} km/h</td></tr>`;
+            }
+            tabla += `</table>`;
+            det.innerHTML = `📊 Pronóstico próximas 5 h:<br>${tabla}`;
+          } else {
+            det.textContent = "No hay datos de pronóstico disponibles.";
+          }
+
+          if (clase === "storm") sendNotification("⚡ Alerta: Hay una tormenta activa o inminente en tu zona.");
+        } catch (e) {
+          res.textContent = "No se pudo obtener información del clima.";
+          icon.textContent = "❌";
+          icon.className = "";
+        }
+      }, err => {
+        res.textContent = "Error al obtener ubicación: " + err.message;
+        icon.textContent = "❌";
+        icon.className = "";
+      });
+    }
+
+    function sendNotification(msg) {
+      if (!("Notification" in window)) return alert(msg);
+      if (Notification.permission === "granted") {
+        new Notification("Alerta de Tormenta", { body: msg });
+      } else if (Notification.permission !== "denied") {
+        Notification.requestPermission().then(permission => {
+          if (permission === "granted") new Notification("Alerta de Tormenta", { body: msg });
+          else alert(msg);
+        });
+      } else {
+        alert(msg);
+      }
+    }
+  </script>
+</body>
+</html>
